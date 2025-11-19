@@ -179,3 +179,55 @@ EOF
     extraTag = local.extra_tag
   }
 }
+
+# Application Load Balancer (ALB)
+
+resource "aws_lb" "alb" {
+  name               = "${local.project}-alb"
+  load_balancer_type = "application"
+  internal           = false
+  subnets            = module.vpc.public_subnets
+  security_groups    = [aws_security_group.web_sg.id]
+
+  tags = {
+    Name     = "${local.project}-alb"
+    extraTag = local.extra_tag
+  }
+}
+
+resource "aws_lb_target_group" "tg" {
+  name     = "${local.project}-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = module.vpc.vpc_id
+  health_check {
+    path                = "/"
+    matcher             = "200-399"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 15
+  }
+  tags = {
+    Name = "${local.project}-tg"
+  }
+}
+
+# Attach instances to target group
+resource "aws_lb_target_group_attachment" "att" {
+  for_each         = { for idx, id in aws_instance.web[*].id : idx => id }
+  target_group_arn = aws_lb_target_group.tg.arn
+  target_id        = each.value
+  port             = 80
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg.arn
+  }
+}
