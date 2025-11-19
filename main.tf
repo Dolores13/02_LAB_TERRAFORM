@@ -231,3 +231,52 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.tg.arn
   }
 }
+
+# EKS: single cluster 
+
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 20.0"
+
+  cluster_name                   = "${local.project}-eks"
+  cluster_version                = "1.29"
+  enable_irsa                    = true
+
+  cluster_endpoint_public_access  = false
+  cluster_endpoint_private_access = false
+ 
+
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnets  # private for nodes good practice
+ 
+
+  eks_managed_node_groups = {
+    default = {
+      desired_size  = 2
+      min_size      = 2
+      max_size      = 3
+      instance_types = ["t3.small"]
+      subnets        = module.vpc.private_subnets
+    }
+  }
+
+  tags = {
+    Project = local.project
+  }
+}
+
+# Kubernetes 
+data "aws_eks_cluster" "eks_cluster" {
+  name = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+data "aws_eks_cluster_auth" "eks_auth" {
+  name = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.eks_cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks_cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks_auth.token
+}
