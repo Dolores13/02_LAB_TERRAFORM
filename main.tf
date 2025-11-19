@@ -128,3 +128,54 @@ resource "aws_security_group" "web_sg" {
     extraTag = local.extra_tag
   }
 }
+# EC2 with Nginx
+resource "aws_instance" "web" {
+  count                       = length(module.vpc.public_subnets)
+  ami                         = var.ami_id
+  instance_type               = var.instance_type
+  subnet_id                   = module.vpc.public_subnets[count.index]
+  vpc_security_group_ids      = [aws_security_group.web_sg.id]
+  associate_public_ip_address = true
+
+  user_data = <<-EOF
+#!/bin/bash
+set -eux
+apt-get update -y
+apt-get install -y nginx
+echo '<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lab 2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background:#f7f7fb; color:#222; }
+    main { max-width: 700px; margin: 10vh auto; background:#fff; padding: 2rem;
+           border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.06); text-align:center; }
+    h1 { margin-top: 0; }
+    button { padding: .8rem 1.2rem; border: none; border-radius: 10px; cursor: pointer;
+             background: #222; color: #fff; font-weight: 700; }
+    button:hover { opacity: .9; }
+    .small { color:#666; font-size:.95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>This is Lab 2 where I learned Terraform! Thanks.</h1>
+    <p class="small">Instance: EC2 >>${count.index + 1}<< (public subnet)</p>
+    <button onclick="liked()">Press if you liked it</button>
+  </main>
+  <script>
+    function liked(){ alert("Thank you very much!"); }
+  </script>
+</body>
+</html>' | tee /var/www/html/index.html
+systemctl enable nginx
+systemctl restart nginx
+EOF
+
+  tags = {
+    Name     = "${local.project}-web-${count.index + 1}"
+    extraTag = local.extra_tag
+  }
+}
