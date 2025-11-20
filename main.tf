@@ -242,7 +242,7 @@ module "eks" {
   cluster_version                = "1.29"
   enable_irsa                    = true
 
-  cluster_endpoint_public_access  = false
+  cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = false
  
 
@@ -280,3 +280,124 @@ provider "kubernetes" {
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks_cluster.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.eks_auth.token
 }
+#Nginx + Service LB
+
+resource "kubernetes_namespace" "lab" {
+  metadata { name = "lab2" }
+}
+
+resource "kubernetes_deployment" "web" {
+  metadata {
+    name      = "web-nginx"
+    namespace = kubernetes_namespace.lab.metadata[0].name
+    labels = { app = "web-nginx" }
+  }
+  spec {
+    replicas = 2
+    selector { match_labels = { app = "web-nginx" } }
+    template {
+      metadata { labels = { app = "web-nginx" } }
+      spec {
+        container {
+          name  = "nginx"
+          image = "nginx:stable"
+          port { container_port = 80 }
+        }
+      }
+    }
+  }
+}
+
+
+resource "kubernetes_service" "web" {
+  metadata {
+    name      = "web-svc"
+    namespace = kubernetes_namespace.lab.metadata[0].name
+    labels    = { app = "web-nginx" }
+  }
+  spec {
+    selector = { app = "web-nginx" }
+    port {
+      port        = 80
+      target_port = 80
+      protocol    = "TCP"
+    }
+    type = "LoadBalancer"
+  }
+}
+
+
+# Outputs
+
+output "alb_dns_name" {
+  description = "Public URL of the ALB for EC2 web servers"
+  value       = aws_lb.alb.dns_name
+}
+
+output "ec2_public_ips" {
+  description = "Public IPs of the EC2 instances"
+  value       = aws_instance.web[*].public_ip
+}
+
+output "eks_cluster_name" {
+  value = module.eks.cluster_name
+}
+
+output "k8s_service_hostname" {
+  description = "External hostname created for the Kubernetes LoadBalancer Service"
+  value       = kubernetes_service.web.status[0].load_balancer[0].ingress[0].hostname
+}
+
+
+
+# set-Alias tf terraform => set alias for terraform command
+# tf version => show the terraform version
+# tf init => desploy all the information that my provide request (initializing the backend))
+# tf init -upgrade => forece upgrade of the provider
+# tf validate => validate the code
+# tf plan => show what is going to be created
+# tf fmt => format the code
+# tf plan => show what is going to be created
+# tf apply => apply the changes (create the infrastructure)
+# tf apply -auto-approve => apply the changes without confirmation
+# tf apply -target="module.eks" => apply the changes only for the eks module
+# tf destroy => destroy the infrastructure
+# tf variables -var-file="variables.tfvars" => create a variable file
+# tf workspace list
+# tf workspace new prod => create a new workspace
+# tf workspace select default => select a workspace. you can changed default for another workspace
+# k get nodes => see the nodes you have in console
+
+
+
+#common errors: No default VPC for this user (fix by creating a VPC in the AWS console)
+#common errors: The Kubernetes provider is attempting to initialize using cluster data that does not yet exist in the plan.
+#common errors: Error: Provider "kubernetes" must be configured with a cluste before it can be used.
+  #tf apply -target="module.vpc" -target="module.eks" => apply just VPC + EKS
+  #aws eks update-kubeconfig --name lab2-terraform-eks --region us-east-1 
+
+
+
+#Remove-Item -Recurse -Force .\.terraform => remove the .terraform folder very important for git 
+
+#ssh-keygen -t rsa -b 2048 -f "nginx-server.key" => create ssh in console
+
+# 1. to check with instance_type is free in the powershell:
+  # aws ec2 describe-instance-types `
+  # --filters Name=free-tier-eligible,Values=true `
+  # --query "InstanceTypes[].InstanceType" `
+  # --region us-east-1 `
+  # --output table
+
+# to check amis available in the powershell:
+  # aws ec2 describe-images --owners amazon --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*" --query "Images[*].[ImageId,Name,CreationDate]" --region us-east-1 --output table
+
+#variables
+  #1º Way to create a variable
+    #variable access_key =>  $env:AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY" (replace YOUR_ACCESS_KEY with your actual AWS access key) - good practice to not hardcode sensitive info
+    #variable secret_key =>  $env:AWS_SECRET_ACCESS_KEY="YOUR_SECRET_KEY (replace YOUR_SECRET_KEY with your actual AWS secret key) - good practice to not hardcode sensitive info
+  #2º Way to create a variable (you need to create the variable.tf and terraform.tfvars)
+    #provider "aws" {                          # AWS provider configuration
+      #region = "us-east-1"
+      #access_key = var.access_key    if I would be using the varibales way but I am using another.
+      #secret_key = var.access_key}
