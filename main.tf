@@ -238,28 +238,27 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
 
-  cluster_name                   = "${local.project}-eks"
-  cluster_version                = "1.29"
-  enable_irsa                    = true
+  cluster_name    = "${local.project}-eks"
+  cluster_version = "1.29"
+  enable_irsa     = true
 
   cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = false
- 
 
   vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets  # private for nodes good practice
- 
+  subnet_ids = module.vpc.private_subnets
 
   eks_managed_node_groups = {
     default = {
-      desired_size  = 2
-      min_size      = 2
-      max_size      = 3
+      desired_size   = 2
+      min_size       = 2
+      max_size       = 3
       instance_types = ["t3.small"]
       subnets        = module.vpc.private_subnets
     }
   }
 
+enable_cluster_creator_admin_permissions = true
   tags = {
     Project = local.project
   }
@@ -279,6 +278,7 @@ provider "kubernetes" {
   host                   = data.aws_eks_cluster.eks_cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks_cluster.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.eks_auth.token
+
 }
 #Nginx + Service LB
 
@@ -401,3 +401,5 @@ output "k8s_service_hostname" {
       #region = "us-east-1"
       #access_key = var.access_key    if I would be using the varibales way but I am using another.
       #secret_key = var.access_key}
+
+#aws sts get-caller-identity => user I am using 
